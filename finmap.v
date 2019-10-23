@@ -326,6 +326,9 @@ Definition fset_sub_eqMixin := Eval hnf in [eqMixin of fset_sub_type by <:].
 Canonical fset_sub_eqType := Eval hnf in EqType fset_sub_type fset_sub_eqMixin.
 Definition fset_sub_choiceMixin := Eval hnf in [choiceMixin of fset_sub_type by <:].
 Canonical fset_sub_choiceType := Eval hnf in ChoiceType fset_sub_type fset_sub_choiceMixin.
+Definition fset_countMixin (T : countType) := Eval hnf in [countMixin of {fset T} by <:].
+Canonical fset_countType (T : countType) := Eval hnf in CountType {fset T} (fset_countMixin T).
+
 
 Definition fset_sub_enum : seq fset_sub_type :=
   undup (pmap insub (enum_fset A)).
@@ -2093,6 +2096,33 @@ Qed.
 
 End PowerSetTheory.
 
+Section FinTypeFset.
+Variables (T : finType).
+
+Definition pickle (s : {fset T}) :=
+  [set x in s].
+
+Definition unpickle (s : {set T}) :=
+  [fset x | x in s]%fset.
+
+Lemma pickleK : cancel pickle unpickle.
+Proof. by move=> s; apply/fsetP=> x; rewrite !inE. Qed.
+
+Lemma unpickleK : cancel unpickle pickle.
+Proof. by move=> s; apply/setP=> x; rewrite !inE. Qed.
+
+Definition fset_finMixin := CanFinMixin pickleK.
+Canonical fset_finType := Eval hnf in FinType {fset T} fset_finMixin.
+
+Lemma card_fsets : #|{:{fset T}}| = 2^#|T|.
+Proof.
+rewrite -(card_image (can_inj pickleK)) /=.
+rewrite -cardsT -card_powerset powersetT; apply: eq_card.
+move=> x; rewrite !inE; apply/mapP; exists (unpickle x).
+  by rewrite mem_enum. by rewrite unpickleK.
+Qed.
+End FinTypeFset.
+
 Section BigFSet.
 Variable (R : Type) (idx : R) (op : Monoid.law idx).
 Variable (I : choiceType).
@@ -2342,11 +2372,13 @@ End BigFOpsSeq.
 
 (* ** Induction Principles *)
 Lemma finSet_rect (T : choiceType) (P : {fset T} -> Type) :
-  P fset0 -> (forall X, (forall Y, Y `<` X -> P Y) -> P X) -> forall X, P X.
+  (forall X, (forall Y, Y `<` X -> P Y) -> P X) -> forall X, P X.
 Proof.
-move=> P0 Psub X; move: (leqnn #|` X|); move: (X in Y in _ <= Y) => Y.
-elim: #|` _| X => [|n IHn] {Y} X; first by rewrite leqn0 cardfs_eq0 => /eqP->.
-move=> Xleq; apply: Psub => Y XsubY; apply: IHn.
+move=> ih X; move: (leqnn #|` X|); move: (X in Y in _ <= Y) => Y.
+elim: #|` _| X => [|n IHn] {Y} X.
+  rewrite leqn0 cardfs_eq0 => /eqP ->; apply: ih.
+  by move=> Y /fproper_ltn_card.
+move=> Xleq; apply: ih => Y XsubY; apply: IHn.
 by rewrite -ltnS (leq_trans _ Xleq) // fproper_ltn_card.
 Qed.
 
@@ -2356,9 +2388,7 @@ Lemma fset_bounded_coind (T : choiceType) (P : {fset T} -> Type) (U : {fset T}):
 Proof.
 move=> Psuper X XsubU; rewrite -[X](fsetDK XsubU)//.
 have {XsubU}: (U `\` X) `<=` U by rewrite fsubsetDl.
-elim: (_ `\` X) => {X} [|X IHX] XsubU.
-  rewrite fsetD0; apply: Psuper => Y /fsub_proper_trans UY/UY.
-  by rewrite fproperEneq eqxx.
+elim: (_ `\` X) => {X} X IHX XsubU.
 apply: Psuper => Y /fsetDK<-; rewrite fproperD2l ?fsubsetDl //.
 by move=> /IHX; apply; rewrite fsubsetDl.
 Qed.
